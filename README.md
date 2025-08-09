@@ -20,22 +20,6 @@ KSP(Kotlin Symbol Processing)와 ASM을 사용하여 Spring Boot 프로젝트의
 - **Jackson**: JSON 직렬화
 - **Spring Annotations**: Spring Web 어노테이션 지원
 
-## 📊 Spring Petclinic 분석 결과
-
-현재 Spring Petclinic 프로젝트를 분석한 결과:
-
-### 📈 통계
-- **총 Controller 수**: 6개
-- **총 엔드포인트 수**: 17개
-
-### 🎯 발견된 Controller들
-1. **VetController** - 수의사 관련 API (2개 엔드포인트)
-2. **PetController** - 반려동물 관련 API (4개 엔드포인트)
-3. **OwnerController** - 반려동물 소유자 관련 API (7개 엔드포인트)
-4. **VisitController** - 방문 관련 API (2개 엔드포인트)
-5. **WelcomeController** - 메인 페이지 (1개 엔드포인트)
-6. **CrashController** - 오류 테스트용 (1개 엔드포인트)
-
 ## 🚀 사용 방법
 
 ### 1. 프로젝트 클론 및 빌드

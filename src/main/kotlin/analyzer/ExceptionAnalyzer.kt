@@ -211,26 +211,7 @@ class ExceptionAnalyzer(
         
         return exceptions
     }
-    
-    /**
-     * 예외 메시지를 추출합니다.
-     */
-    private fun extractExceptionMessage(methodNode: MethodNode, beforeInstruction: AbstractInsnNode): String? {
-        // 이전 instruction들에서 String 리터럴 찾기
-        var current = beforeInstruction.previous
-        var depth = 0
-        
-        while (current != null && depth < 10) { // 최대 10개 instruction만 역추적
-            if (current is LdcInsnNode && current.cst is String) {
-                return current.cst as String
-            }
-            current = current.previous
-            depth++
-        }
-        
-        return null
-    }
-    
+
     /**
      * Lambda에서 생성되는 예외 타입을 찾습니다.
      */

@@ -72,7 +72,7 @@ class BytecodeAnalyzer {
             }
         }
         
-        // 3단계: 통계 정보 출력
+        // 5단계: 통계 정보 출력
         val stats = callGraphAnalyzer.getStatistics()
         println("\n📊 분석 결과:")
         println("   - 프로젝트: ${System.getProperty("project.name", "Unknown")}")

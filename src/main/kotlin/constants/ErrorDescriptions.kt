@@ -1,8 +1,8 @@
 package constants
 
 /**
- * 에러 설명 상수들
- * 프로젝트 코드에서 명시적으로 정의되지 않은 경우 사용하는 기본 설명들
+ * Error Description
+ * 프로젝트 코드에서 명시적으로 정의되지 않은 경우, 사용하는 사전 정의 default description
  */
 object ErrorDescriptions {
     

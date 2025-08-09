@@ -1,6 +1,7 @@
 package analyzer
 
 import constants.ErrorDescriptions
+import constants.ExceptionStatusMappings
 import model.FailureResponse
 import org.objectweb.asm.tree.AbstractInsnNode
 import org.objectweb.asm.tree.AnnotationNode
@@ -24,73 +25,7 @@ class ExceptionAnalyzer(
     // @ResponseStatus 어노테이션 정보를 캐시
     private val responseStatusCache = mutableMapOf<String, Int>()
     
-    companion object {
-        /**
-         * 예외 타입별 HTTP 상태 코드 매핑
-         */
-        private val EXCEPTION_STATUS_MAPPING = mapOf(
-            // Standard Java Exceptions
-            "java.lang.IllegalArgumentException" to 400,
-            "java.lang.IllegalStateException" to 400,
-            "java.lang.NullPointerException" to 500,
-            "java.lang.RuntimeException" to 500,
-            "java.lang.Exception" to 500,
-            
-            // Spring Framework Exceptions
-            "org.springframework.web.bind.MethodArgumentNotValidException" to 400,
-            "org.springframework.web.HttpRequestMethodNotSupportedException" to 405,
-            "org.springframework.web.HttpMediaTypeNotSupportedException" to 415,
-            "org.springframework.web.bind.MissingServletRequestParameterException" to 400,
-            "org.springframework.web.method.annotation.MethodArgumentTypeMismatchException" to 400,
-            "org.springframework.security.access.AccessDeniedException" to 403,
-            "org.springframework.security.authentication.AuthenticationException" to 401,
-            "org.springframework.dao.DataAccessException" to 500,
-            "org.springframework.dao.EmptyResultDataAccessException" to 404,
-            "org.springframework.dao.DataIntegrityViolationException" to 409,
-            
-            // Common Custom Exceptions (추론된 패턴들)
-            "BadRequestException" to 400,
-            "NotFoundException" to 404,
-            "NotFoundExceptionException" to 404,
-            "AuthException" to 401,
-            "AuthenticationException" to 401,
-            "AuthorizationException" to 403,
-            "ForbiddenException" to 403,
-            "UnauthorizedException" to 401,
-            "ConflictException" to 409,
-            "ValidationException" to 400,
-            "InvalidRequestException" to 400,
-            "ServiceException" to 500,
-            "InternalServerException" to 500,
-            "BusinessException" to 400,
-            "DomainException" to 400,
-            
-            // JWT/Security Related
-            "JwtException" to 401,
-            "TokenExpiredException" to 401,
-            "InvalidTokenException" to 401,
-            "SecurityException" to 403,
-            
-            // Database/JPA Related  
-            "EntityNotFoundException" to 404,
-            "OptimisticLockException" to 409,
-            "PersistenceException" to 500,
-            "ConstraintViolationException" to 400,
-            "DataConstraintViolationException" to 409,
-            
-            // File/Upload Related
-            "FileNotFoundException" to 404,
-            "MaxUploadSizeExceededException" to 413,
-            "MultipartException" to 400,
-            
-            // Network/External API
-            "ConnectException" to 503,
-            "SocketTimeoutException" to 504,
-            "TimeoutException" to 504,
-            "HttpClientErrorException" to 400,
-            "HttpServerErrorException" to 500
-        )
-    }
+
     
     /**
      * 메서드에서 발생할 수 있는 예외들을 분석합니다.
@@ -348,9 +283,7 @@ class ExceptionAnalyzer(
         val responseStatusCode = extractStatusFromResponseStatus(exceptionType)
         
         // 3순위: 매핑 테이블의 상태 코드
-        val mappedStatusCode = EXCEPTION_STATUS_MAPPING[fullExceptionType] 
-            ?: EXCEPTION_STATUS_MAPPING[cleanExceptionType] 
-            ?: EXCEPTION_STATUS_MAPPING[exceptionType]
+        val mappedStatusCode = ExceptionStatusMappings.getStatusCode(exceptionType)
         
         // 우선순위에 따라 상태 코드 결정
         val statusCode = adviceStatusCode ?: responseStatusCode ?: mappedStatusCode ?: 500
@@ -450,6 +383,6 @@ class ExceptionAnalyzer(
                className.contains("Exception") ||
                className.contains("Error") ||
                className == "java.lang.Throwable" ||
-               EXCEPTION_STATUS_MAPPING.containsKey(className)
+               ExceptionStatusMappings.containsException(className)
     }
 } 

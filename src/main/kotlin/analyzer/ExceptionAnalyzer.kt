@@ -1,13 +1,28 @@
 package analyzer
 
+import constants.ErrorDescriptions
 import model.FailureResponse
-import org.objectweb.asm.tree.*
+import org.objectweb.asm.tree.AbstractInsnNode
+import org.objectweb.asm.tree.AnnotationNode
+import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.tree.InsnNode
+import org.objectweb.asm.tree.InvokeDynamicInsnNode
+import org.objectweb.asm.tree.LdcInsnNode
+import org.objectweb.asm.tree.MethodInsnNode
+import org.objectweb.asm.tree.MethodNode
+import org.objectweb.asm.tree.TypeInsnNode
+import utils.ResponseStatusParser
 
 /**
  * 예외 분석기
  * 메서드의 바이트코드를 분석하여 발생 가능한 예외들을 찾아냅니다.
  */
-class ExceptionAnalyzer {
+class ExceptionAnalyzer(
+    private val adviceAnalyzer: AdviceAnalyzer? = null
+) {
+    
+    // @ResponseStatus 어노테이션 정보를 캐시
+    private val responseStatusCache = mutableMapOf<String, Int>()
     
     companion object {
         /**
@@ -74,37 +89,6 @@ class ExceptionAnalyzer {
             "TimeoutException" to 504,
             "HttpClientErrorException" to 400,
             "HttpServerErrorException" to 500
-        )
-        
-        /**
-         * 예외 타입별 기본 설명
-         */
-        private val EXCEPTION_DESCRIPTIONS = mapOf(
-            "java.lang.IllegalArgumentException" to "잘못된 인수가 전달됨",
-            "java.lang.IllegalStateException" to "객체가 잘못된 상태에 있음",
-            "java.lang.NullPointerException" to "Null 참조 접근",
-            "BadRequestException" to "잘못된 요청",
-            "NotFoundException" to "리소스를 찾을 수 없음",
-            "NotFoundExceptionException" to "리소스를 찾을 수 없음",
-            "AuthException" to "인증 실패",
-            "AuthenticationException" to "인증 실패",
-            "AuthorizationException" to "권한 없음",
-            "ForbiddenException" to "접근 권한 없음",
-            "UnauthorizedException" to "인증되지 않은 접근",
-            "ConflictException" to "리소스 충돌",
-            "ValidationException" to "유효성 검사 실패",
-            "InvalidRequestException" to "잘못된 요청 형식",
-            "ServiceException" to "서비스 처리 오류",
-            "InternalServerException" to "내부 서버 오류",
-            "BusinessException" to "비즈니스 로직 오류",
-            "DomainException" to "도메인 규칙 위반",
-            "EntityNotFoundException" to "엔티티를 찾을 수 없음",
-            "JwtException" to "JWT 토큰 오류",
-            "TokenExpiredException" to "토큰이 만료됨",
-            "InvalidTokenException" to "유효하지 않은 토큰",
-            "MaxUploadSizeExceededException" to "업로드 파일 크기 초과",
-            "ConnectException" to "외부 서비스 연결 실패",
-            "TimeoutException" to "요청 시간 초과"
         )
     }
     
@@ -356,16 +340,26 @@ class ExceptionAnalyzer {
         val cleanExceptionType = exceptionType.substringAfterLast('.')
         val fullExceptionType = if (exceptionType.contains('.')) exceptionType else "unknown.$exceptionType"
         
-        val statusCode = EXCEPTION_STATUS_MAPPING[fullExceptionType] 
+        // 1순위: @ControllerAdvice의 @ExceptionHandler에서 정의된 상태 코드
+        val adviceStatusCode = adviceAnalyzer?.getHandlerInfo(fullExceptionType)?.statusCode
+            ?: adviceAnalyzer?.getHandlerInfo(cleanExceptionType)?.statusCode
+        
+        // 2순위: @ResponseStatus 어노테이션에서 추출한 상태 코드
+        val responseStatusCode = extractStatusFromResponseStatus(exceptionType)
+        
+        // 3순위: 매핑 테이블의 상태 코드
+        val mappedStatusCode = EXCEPTION_STATUS_MAPPING[fullExceptionType] 
             ?: EXCEPTION_STATUS_MAPPING[cleanExceptionType] 
             ?: EXCEPTION_STATUS_MAPPING[exceptionType]
-            ?: 500
-            
-        val description = message 
-            ?: EXCEPTION_DESCRIPTIONS[fullExceptionType]
-            ?: EXCEPTION_DESCRIPTIONS[cleanExceptionType]
-            ?: EXCEPTION_DESCRIPTIONS[exceptionType]
-            ?: "예외 발생"
+        
+        // 우선순위에 따라 상태 코드 결정
+        val statusCode = adviceStatusCode ?: responseStatusCode ?: mappedStatusCode ?: 500
+        
+        val description = ErrorDescriptions.getExceptionDescription(
+            exceptionType = exceptionType,
+            explicitMessage = message,
+            defaultMessage = "Exception occurred"
+        )
         
         // detectedAt을 사용자 친화적으로 변경
         val userFriendlyLocation = when {
@@ -388,6 +382,65 @@ class ExceptionAnalyzer {
         )
     }
     
+    /**
+     * 예외 클래스들에서 @ResponseStatus 정보를 수집합니다.
+     */
+    fun collectResponseStatusInfo(classFiles: List<java.io.File>) {
+        println("📊 @ResponseStatus 어노테이션 수집 시작...")
+        
+        classFiles.forEach { classFile ->
+            try {
+                val classNode = BytecodeAnalyzer.analyzeClassFile(classFile)
+                val className = classNode.name.replace('/', '.')
+                
+                if (isExceptionClass(className)) {
+                    val statusCode = extractStatusFromClass(classNode)
+                    if (statusCode != null) {
+                        responseStatusCache[className] = statusCode
+                        val simpleClassName = className.substringAfterLast('.')
+                        responseStatusCache[simpleClassName] = statusCode
+                        println("   → @ResponseStatus 발견: $simpleClassName -> HTTP $statusCode")
+                    }
+                }
+            } catch (e: Exception) {
+                // 무시하고 계속 진행
+            }
+        }
+        
+        println("✅ @ResponseStatus 수집 완료: ${responseStatusCache.size}개 항목")
+    }
+    
+    /**
+     * 클래스에서 @ResponseStatus 어노테이션의 상태 코드를 추출합니다.
+     */
+    private fun extractStatusFromClass(classNode: ClassNode): Int? {
+        classNode.visibleAnnotations?.forEach { annotation ->
+            if (annotation.desc == "Lorg/springframework/web/bind/annotation/ResponseStatus;") {
+                return extractStatusFromResponseStatusAnnotation(annotation)
+            }
+        }
+        return null
+    }
+    
+    /**
+     * @ResponseStatus 어노테이션에서 HTTP 상태 코드를 추출합니다.
+     */
+    private fun extractStatusFromResponseStatus(exceptionType: String): Int? {
+        // 캐시에서 먼저 확인
+        responseStatusCache[exceptionType]?.let { return it }
+        
+        // 단순 클래스명으로도 확인
+        val simpleClassName = exceptionType.substringAfterLast('.')
+        return responseStatusCache[simpleClassName]
+    }
+    
+    /**
+     * @ResponseStatus 어노테이션에서 상태 코드를 추출합니다.
+     */
+    private fun extractStatusFromResponseStatusAnnotation(annotation: AnnotationNode): Int? {
+        return ResponseStatusParser.extractStatusFromAnnotation(annotation)
+    }
+
     /**
      * 클래스가 예외 클래스인지 확인합니다.
      */

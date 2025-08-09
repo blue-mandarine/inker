@@ -10,11 +10,12 @@ import java.util.jar.JarFile
  * Call Graph 분석기
  * Controller에서 Service 메서드 호출을 추적하고, Service Layer의 예외를 분석합니다.
  */
-class CallGraphAnalyzer {
+class CallGraphAnalyzer(
+    private val exceptionAnalyzer: ExceptionAnalyzer
+) {
     
     private val serviceClasses = mutableMapOf<String, ClassNode>() // 클래스명 -> ClassNode
     private val serviceMethodNodes = mutableMapOf<String, MethodNode>() // 메서드시그니처 -> MethodNode
-    private val exceptionAnalyzer = ExceptionAnalyzer()
     
     /**
      * Service Layer 클래스들을 로드합니다.
@@ -87,19 +88,17 @@ class CallGraphAnalyzer {
             try {
                 val serviceMethod = serviceMethodNodes[serviceCall]
                 if (serviceMethod != null) {
-                    val serviceClassName = serviceCall.substringBeforeLast(".")
-                    
-                    // Service 메서드에서 발생하는 예외들 분석
-                    val exceptions = exceptionAnalyzer.analyzeMethodExceptions(serviceMethod)
+                    // 호출 체인 예외 분석
+                    val exceptions = analyzeDeepServiceExceptions(serviceMethod)
                     exceptions.forEach { exception ->
-                        // Service 예외를 Controller와 연결 (사용자 친화적인 위치 정보로 변경)
+                        // Service 예외를 Controller와 연결
                         val enhancedException = exception.copy(
-                            detectedAt = "Service Layer"
+                            detectedAt = if (exception.detectedAt == "Direct throw") "Service Layer" else exception.detectedAt
                         )
                         serviceExceptions.add(enhancedException)
                     }
                     
-                    println("🔗 Service 호출 분석: $serviceCall -> ${exceptions.size}개 예외 발견")
+                    println("🔗 Deep Service 호출 분석: $serviceCall -> ${exceptions.size}개 예외 발견 (다층 체인 포함)")
                 } else {
                     println("⚠️  Service 메서드를 찾을 수 없음: $serviceCall")
                 }

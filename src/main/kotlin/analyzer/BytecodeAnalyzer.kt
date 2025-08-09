@@ -1,8 +1,10 @@
 package analyzer
 
+import constants.ErrorDescriptions
 import model.*
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.tree.*
+import utils.ResponseEntityParser
 import java.io.File
 import java.io.FileInputStream
 
@@ -11,8 +13,9 @@ import java.io.FileInputStream
  * Spring Controller와 Service Layer를 분석하여 API 엔드포인트와 예외 정보를 추출합니다.
  */
 class BytecodeAnalyzer {
-    private val exceptionAnalyzer = ExceptionAnalyzer()
-    private val callGraphAnalyzer = CallGraphAnalyzer()
+    private val adviceAnalyzer = AdviceAnalyzer()
+    private val exceptionAnalyzer = ExceptionAnalyzer(adviceAnalyzer)
+    private val callGraphAnalyzer = CallGraphAnalyzer(exceptionAnalyzer)
     
     companion object {
         /**
@@ -34,10 +37,16 @@ class BytecodeAnalyzer {
         
         println("📊 전체 분석 시작...")
         
-        // 1단계: Service Layer 클래스들 먼저 로드
+        // 1단계: ControllerAdvice 클래스들 먼저 로드
+        adviceAnalyzer.loadAdviceClasses(classFiles)
+        
+        // 2단계: @ResponseStatus 어노테이션 정보 수집
+        exceptionAnalyzer.collectResponseStatusInfo(classFiles)
+        
+        // 3단계: Service Layer 클래스들 로드
         callGraphAnalyzer.loadServiceClasses(classFiles)
         
-        // 2단계: Controller 클래스들 분석
+        // 4단계: Controller 클래스들 분석
         println("📊 Controller 분석 시작...")
         classFiles.forEach { classFile ->
             try {
@@ -270,6 +279,7 @@ class BytecodeAnalyzer {
      * 파라미터의 타입을 추출합니다.
      */
     private fun extractParameterType(methodNode: MethodNode, paramIndex: Int): String {
+        // TODO: 정확한 파라미터 타입 추출 필요
         // 메서드 시그니처에서 파라미터 타입 추출 (간단화된 버전)
         return "java.lang.Object" // 실제로는 더 복잡한 타입 추출 로직이 필요
     }
@@ -342,15 +352,38 @@ class BytecodeAnalyzer {
     private fun analyzeResponses(methodNode: MethodNode, controllerClass: String): ApiResponses {
         // 성공 응답 분석
         val returnType = extractReturnType(methodNode.desc)
+        
+        // ResponseEntity 패턴에서 상태 코드 추출
+        val responseEntityStatusCodes = if (returnType.contains("ResponseEntity")) {
+            ResponseEntityParser.extractStatusCodesFromMethod(methodNode)
+        } else {
+            emptyList()
+        }
+        
+        // 성공 응답의 상태 코드 결정
+        val successStatusCode = when {
+            responseEntityStatusCodes.isNotEmpty() -> {
+                // ResponseEntity에서 추출된 2xx 상태 코드 중 첫 번째
+                responseEntityStatusCodes.firstOrNull { it in 200..299 } ?: 200
+            }
+            else -> 200
+        }
+        
         val successResponse = SuccessResponse(
-            statusCode = 200,
+            statusCode = successStatusCode,
             type = returnType,
             description = when {
-                returnType.contains("ModelAndView") -> "View와 Model을 포함한 응답"
-                returnType.contains("String") -> "View 이름 또는 리다이렉트 경로"
-                returnType.contains("ResponseEntity") -> "HTTP 응답 엔티티"
-                returnType == "void" -> "응답 본문 없음"
-                else -> "정상 응답"
+                returnType.contains("ModelAndView") -> "Response with View and Model"
+                returnType.contains("String") -> "View name or redirect path"
+                returnType.contains("ResponseEntity") -> {
+                    if (responseEntityStatusCodes.isNotEmpty()) {
+                        "HTTP response entity (detected status codes: ${responseEntityStatusCodes.joinToString(", ")})"
+                    } else {
+                        "HTTP response entity"
+                    }
+                }
+                returnType == "void" -> "No response body"
+                else -> "Success response"
             }
         )
 
@@ -364,6 +397,17 @@ class BytecodeAnalyzer {
         // 2. Service Layer에서 발생하는 예외들 (Call Graph 분석)
         val serviceExceptions = callGraphAnalyzer.analyzeServiceExceptions(methodNode, controllerClass)
         allFailureResponses.addAll(serviceExceptions)
+        
+        // 3. ResponseEntity에서 추출된 에러 상태 코드들 (4xx, 5xx)
+        responseEntityStatusCodes.filter { it >= 400 }.forEach { statusCode ->
+            val errorResponse = FailureResponse(
+                statusCode = statusCode,
+                exceptionType = "ResponseEntity",
+                description = ErrorDescriptions.getStatusCodeDescription(statusCode),
+                detectedAt = "Controller Method"
+            )
+            allFailureResponses.add(errorResponse)
+        }
 
         return ApiResponses(
             success = successResponse,

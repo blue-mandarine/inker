@@ -70,13 +70,19 @@ class ApiDocumentationGenerator(
             "$projectPath/target/classes",
             "$projectPath/build/classes/java/main",
             
+            // Kotlin Gradle 경로 (추가)
+            "$projectPath/build/classes/kotlin/main",
+            
             // 멀티모듈 프로젝트 (backend 등)
             "$projectPath/backend/target/classes",
             "$projectPath/backend/build/classes/java/main",
+            "$projectPath/backend/build/classes/kotlin/main",
             "$projectPath/server/target/classes", 
             "$projectPath/server/build/classes/java/main",
+            "$projectPath/server/build/classes/kotlin/main",
             "$projectPath/api/target/classes",
             "$projectPath/api/build/classes/java/main",
+            "$projectPath/api/build/classes/kotlin/main",
             
             // IntelliJ IDEA 빌드 경로
             "$projectPath/out/production/classes",
@@ -90,7 +96,8 @@ class ApiDocumentationGenerator(
             "$projectPath/target/test-classes", // 테스트 클래스도 포함
             "$projectPath/backend/target/test-classes",
             "$projectPath/build/classes/java/test",
-            "$projectPath/backend/build/classes/java/test"
+            "$projectPath/backend/build/classes/java/test",
+            "$projectPath/build/classes/kotlin/test"
         )
 
         for (buildPath in possiblePaths) {

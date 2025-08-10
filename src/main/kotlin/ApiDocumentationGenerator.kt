@@ -59,57 +59,38 @@ class ApiDocumentationGenerator(
 
     /**
      * Controller 클래스 파일들을 찾습니다.
-     * 다양한 빌드 도구와 구조를 지원합니다.
+     * 프로젝트 전체에서 'classes' 디렉토리를 동적으로 검색
      */
     private fun findControllerClassFiles(): List<File> {
-        val classFiles = mutableListOf<File>()
-        
-        // 다양한 빌드 경로에서 클래스 파일 검색
-        val possiblePaths = listOf(
-            // Maven 표준 경로
-            "$projectPath/target/classes",
-            "$projectPath/build/classes/java/main",
-            
-            // Kotlin Gradle 경로 (추가)
-            "$projectPath/build/classes/kotlin/main",
-            
-            // 멀티모듈 프로젝트 (backend 등)
-            "$projectPath/backend/target/classes",
-            "$projectPath/backend/build/classes/java/main",
-            "$projectPath/backend/build/classes/kotlin/main",
-            "$projectPath/server/target/classes", 
-            "$projectPath/server/build/classes/java/main",
-            "$projectPath/server/build/classes/kotlin/main",
-            "$projectPath/api/target/classes",
-            "$projectPath/api/build/classes/java/main",
-            "$projectPath/api/build/classes/kotlin/main",
-            
-            // IntelliJ IDEA 빌드 경로
-            "$projectPath/out/production/classes",
-            "$projectPath/backend/out/production/classes",
-            
-            // Eclipse 빌드 경로
-            "$projectPath/bin/main",
-            "$projectPath/backend/bin/main",
-            
-            // 추가 가능한 경로들
-            "$projectPath/target/test-classes", // 테스트 클래스도 포함
-            "$projectPath/backend/target/test-classes",
-            "$projectPath/build/classes/java/test",
-            "$projectPath/backend/build/classes/java/test",
-            "$projectPath/build/classes/kotlin/test"
-        )
-
-        for (buildPath in possiblePaths) {
-            val buildDir = File(buildPath)
-            if (buildDir.exists() && buildDir.isDirectory) {
-                println("📂 빌드 디렉토리 발견: $buildPath")
-                collectClassFiles(buildDir, classFiles)
-                break // 첫 번째로 찾은 빌드 디렉토리를 사용
-            }
+        val projectDir = File(projectPath)
+        if (!projectDir.isDirectory) {
+            println("❌ 프로젝트 경로가 올바르지 않습니다: $projectPath")
+            return emptyList()
         }
 
-        return classFiles
+        println("📂 프로젝트 내에서 컴파일된 클래스(.class) 파일을 검색합니다...")
+
+        val excludedPaths = setOf(".gradle", ".idea", "src", "node_modules", "docs")
+
+        val classesDirs = projectDir.walk()
+            .filter { it.isDirectory && it.name == "classes" }
+            .filter { dir ->
+                dir.toPath().none { pathComponent -> excludedPaths.contains(pathComponent.toString()) }
+            }
+            .toList()
+
+        if (classesDirs.isEmpty()) {
+            return emptyList()
+        }
+
+        println("📂 컴파일된 클래스 디렉토리를 찾았습니다:")
+        val classFiles = mutableListOf<File>()
+        classesDirs.forEach { dir ->
+            println("   - ${dir.relativeTo(projectDir)}")
+            collectClassFiles(dir, classFiles)
+        }
+
+        return classFiles.distinctBy { it.absolutePath }
     }
 
     /**
@@ -119,9 +100,8 @@ class ApiDocumentationGenerator(
         directory.listFiles()?.forEach { file ->
             when {
                 file.isDirectory -> collectClassFiles(file, classFiles)
-                file.name.endsWith(".class") && !file.name.contains("$") -> {
+                file.name.endsWith(".class") && !file.name.contains('$') -> {
                     classFiles.add(file)
-                    println("🔍 분석 중: ${file.name}")
                 }
             }
         }

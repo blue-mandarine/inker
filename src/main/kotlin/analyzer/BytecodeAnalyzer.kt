@@ -6,7 +6,6 @@ import model.ApiParameter
 import model.ApiResponses
 import model.ControllerInfo
 import model.FailureResponse
-import model.ModelField
 import model.ParameterSource
 import model.RequestBodyInfo
 import model.SuccessResponse
@@ -24,10 +23,8 @@ import java.io.FileInputStream
 class BytecodeAnalyzer {
     private val adviceAnalyzer = AdviceAnalyzer()
     private val exceptionAnalyzer = ExceptionAnalyzer(adviceAnalyzer)
-    private val callGraphAnalyzer = CallGraphAnalyzer(exceptionAnalyzer)
-    
-    // 모델 클래스 정보를 저장하는 맵
-    private val modelClasses = mutableMapOf<String, RequestBodyInfo>()
+    private val callGraphBusinessLogicAnalyzer = CallGraphBusinessLogicAnalyzer(exceptionAnalyzer)
+    private val callGraphModelAnalyzer = CallGraphModelAnalyzer()
 
     companion object {
         /**
@@ -56,10 +53,10 @@ class BytecodeAnalyzer {
         exceptionAnalyzer.collectResponseStatusInfo(classFiles)
 
         // 3단계: 모델 클래스들 로드
-        loadModelClasses(classFiles)
+        callGraphModelAnalyzer.loadModelClasses(classFiles)
 
         // 4단계: 비즈니스 로직 클래스들 로드
-        callGraphAnalyzer.loadBusinessLogicClasses(classFiles)
+        callGraphBusinessLogicAnalyzer.loadBusinessLogicClasses(classFiles)
 
         // 5단계: Controller 클래스들 분석
         println("📊 Controller 분석 시작...")
@@ -88,7 +85,7 @@ class BytecodeAnalyzer {
         }
 
         // 6단계: 통계 정보 출력
-        val stats = callGraphAnalyzer.getStatistics()
+        val stats = callGraphBusinessLogicAnalyzer.getStatistics()
         println("\n📊 분석 결과:")
         println("   - 프로젝트: ${System.getProperty("project.name", "Unknown")}")
         println("   - 경로: ${System.getProperty("project.path", "Unknown")}")
@@ -104,81 +101,6 @@ class BytecodeAnalyzer {
         println("   - 발견된 예외 수: $totalExceptions")
 
         return controllers
-    }
-
-    /**
-     * 모델 클래스 로드
-     */
-    private fun loadModelClasses(classFiles: List<File>) {
-        println("🔍 모델 클래스 수집 시작...")
-        
-        classFiles.forEach { classFile ->
-            try {
-                val classNode = analyzeClassFile(classFile)
-                val className = classNode.name.replace('/', '.')
-                
-                // 모델 클래스인지 확인 (DTO, Entity, Request, Response 등)
-                if (isModelClass(classNode)) {
-                    val modelInfo = analyzeModelClass(classNode, className)
-                    modelClasses[className] = modelInfo
-                    println("✅ 모델 클래스 발견: $className (필드 수: ${modelInfo.modelFields.size})")
-                }
-            } catch (e: Exception) {
-                println("⚠️  모델 클래스 분석 실패: ${classFile.name} - ${e.message}")
-            }
-        }
-        
-        println("📊 총 ${modelClasses.size}개의 모델 클래스를 수집했습니다.")
-    }
-
-    /**
-     * 모델 클래스인지 확인합니다.
-     * Spring 컴포넌트가 아닌 모든 클래스를 모델로 인식합니다.
-     */
-    private fun isModelClass(classNode: ClassNode): Boolean {
-        classNode.visibleAnnotations?.forEach { annotation ->
-            when (annotation.desc) {
-                "Lorg/springframework/stereotype/Controller;",
-                "Lorg/springframework/web/bind/annotation/RestController;",
-                "Lorg/springframework/stereotype/Service;",
-                "Lorg/springframework/stereotype/Component;",
-                "Lorg/springframework/stereotype/Repository;",
-                "Lorg/springframework/web/bind/annotation/ControllerAdvice;",
-                "Lorg/springframework/web/bind/annotation/RestControllerAdvice;" -> {
-                    return false // Spring 컴포넌트를 제외한 모든 클래스 수집
-                }
-            }
-        }
-        
-        // Spring 컴포넌트가 아닌 모든 클래스는 모델로 인식
-        return true
-    }
-
-    /**
-     * 모델 클래스를 분석하여 RequestBodyInfo를 생성합니다.
-     */
-    private fun analyzeModelClass(classNode: ClassNode, className: String): RequestBodyInfo {
-        val modelFields = mutableListOf<ModelField>()
-        
-        classNode.fields.forEach { fieldNode ->
-            val fieldName = fieldNode.name
-            val fieldType = extractFieldType(fieldNode.desc)
-            val required = !fieldType.endsWith("?") && !fieldType.contains("Optional")
-            
-            modelFields.add(
-                ModelField(
-                    name = fieldName,
-                    type = fieldType,
-                    required = required,
-                    description = extractFieldDescription(fieldNode)
-                )
-            )
-        }
-        
-        return RequestBodyInfo(
-            type = className,
-            modelFields = modelFields
-        )
     }
 
     /**
@@ -449,61 +371,7 @@ class BytecodeAnalyzer {
      * RequestBody 모델 클래스를 분석하여 필드 정보를 추출합니다.
      */
     private fun analyzeRequestBodyModel(className: String): RequestBodyInfo? {
-        // 먼저 미리 수집된 모델 클래스에서 찾기
-        modelClasses[className]?.let { modelInfo ->
-            println("✅ 미리 수집된 모델 클래스 사용: $className (필드 수: ${modelInfo.modelFields.size})")
-            return modelInfo
-        }
-        
-        // 미리 수집되지 않은 경우에만 직접 분석
-        println("🔍 RequestBody 모델 직접 분석: $className")
-        try {
-            // 클래스 파일 경로 찾기
-            val classFilePath = findClassFile(className)
-            if (classFilePath == null) {
-                println("⚠️  클래스 파일을 찾을 수 없음: $className")
-                return RequestBodyInfo(type = className)
-            }
-
-            println("✅ 클래스 파일 발견: ${classFilePath.absolutePath}")
-
-            // ASM으로 클래스 파일 분석
-            val classNode = ClassReader(classFilePath.readBytes()).accept(
-                ClassNode(),
-                ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG
-            ) as ClassNode
-
-            println("📊 클래스 분석 완료: ${classNode.name}")
-            println("   - 필드 수: ${classNode.fields.size}")
-
-            val modelFields = mutableListOf<ModelField>()
-
-            // 필드 정보 추출
-            classNode.fields.forEach { fieldNode ->
-                val fieldName = fieldNode.name
-                val fieldType = extractFieldType(fieldNode.desc)
-                val required = !fieldType.endsWith("?") && !fieldType.contains("Optional")
-
-                println("   - 필드: $fieldName (${fieldNode.desc}) -> $fieldType, required: $required")
-
-                modelFields.add(
-                    ModelField(
-                        name = fieldName,
-                        type = fieldType,
-                        required = required,
-                        description = extractFieldDescription(fieldNode)
-                    )
-                )
-            }
-
-            return RequestBodyInfo(
-                type = className,
-                modelFields = modelFields
-            )
-        } catch (e: Exception) {
-            println("⚠️  RequestBody 모델 분석 실패 ($className): ${e.message}")
-            return RequestBodyInfo(type = className)
-        }
+        return callGraphModelAnalyzer.analyzeModelDeep(className)
     }
 
     /**
@@ -564,41 +432,6 @@ class BytecodeAnalyzer {
                 file.name.endsWith(".class") -> classFiles.add(file)
             }
         }
-    }
-
-    /**
-     * 필드 타입을 추출합니다.
-     */
-    private fun extractFieldType(descriptor: String): String {
-        return when {
-            descriptor.startsWith("L") -> {
-                // 클래스 타입
-                descriptor.substring(1, descriptor.length - 1).replace('/', '.')
-            }
-
-            descriptor.startsWith("[") -> {
-                // 배열 타입
-                val elementType = descriptor.substring(1)
-                if (elementType.startsWith("L")) {
-                    elementType.substring(1, elementType.length - 1).replace('/', '.') + "[]"
-                } else {
-                    descriptor
-                }
-            }
-
-            else -> {
-                // 기본 타입
-                descriptor
-            }
-        }
-    }
-
-    /**
-     * 필드 설명을 추출합니다.
-     */
-    private fun extractFieldDescription(fieldNode: org.objectweb.asm.tree.FieldNode): String? {
-        // TODO: Javadoc/KDoc 주석 추출 로직 추가 가능
-        return null
     }
 
     /**
@@ -720,7 +553,7 @@ class BytecodeAnalyzer {
 
         // 2. 비즈니스 로직에서 발생하는 예외들 (Call Graph 분석)
         val businessLogicExceptions =
-            callGraphAnalyzer.analyzeBusinessLogicExceptions(methodNode, controllerClass)
+            callGraphBusinessLogicAnalyzer.analyzeBusinessLogicExceptions(methodNode, controllerClass)
         allFailureResponses.addAll(businessLogicExceptions)
 
         // 3. ResponseEntity에서 추출된 에러 상태 코드들 (4xx, 5xx)

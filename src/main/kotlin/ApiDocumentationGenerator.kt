@@ -596,6 +596,14 @@ class ApiDocumentationGenerator(
                     font-size: 0.8em;
                 }
                 
+                .enum-badge {
+                    background: #6f42c1;
+                    color: white;
+                    padding: 2px 8px;
+                    border-radius: 3px;
+                    font-size: 0.8em;
+                }
+                
                 .fields-title {
                     font-weight: 600;
                     color: #495057;
@@ -635,6 +643,76 @@ class ApiDocumentationGenerator(
                     overflow-x: auto;
                     margin: 0;
                     white-space: pre;
+                }
+                
+                .nested-model {
+                    border-left: 3px solid #007bff;
+                    padding-left: 15px;
+                    margin: 10px 0;
+                }
+                
+                .nested-model-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    margin-bottom: 10px;
+                    padding: 8px;
+                    background: #e3f2fd;
+                    border-radius: 3px;
+                }
+                
+                .nested-model-name {
+                    font-weight: 600;
+                    color: #1976d2;
+                    font-size: 0.9em;
+                }
+                
+                .model-field {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 8px 0;
+                    border-bottom: 1px solid #e9ecef;
+                }
+                
+                .model-field:last-child {
+                    border-bottom: none;
+                }
+                
+                .field-name {
+                    font-weight: 600;
+                    color: #495057;
+                    min-width: 120px;
+                }
+                
+                .field-type {
+                    background: #e9ecef;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-size: 0.8em;
+                    color: #495057;
+                }
+                
+                .field-required {
+                    background: #dc3545;
+                    color: white;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-size: 0.7em;
+                }
+                
+                .field-optional {
+                    background: #28a745;
+                    color: white;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-size: 0.7em;
+                }
+                
+                .field-description {
+                    color: #6c757d;
+                    font-size: 0.9em;
+                    margin-left: auto;
                 }
                 
                 .no-data {
@@ -885,23 +963,13 @@ class ApiDocumentationGenerator(
             <div class="model-header">
                 <span class="model-name">${requestBodyInfo.type.substringAfterLast('.')}</span>
                 <span class="model-required">${if (requestBodyInfo.required) "Required" else "Optional"}</span>
+                ${if (requestBodyInfo.isEnum) "<span class=\"enum-badge\">Enum</span>" else ""}
             </div>
             ${if (requestBodyInfo.modelFields.isNotEmpty()) """
             <div class="model-fields">
                 <div class="fields-title">Fields:</div>
                 ${requestBodyInfo.modelFields.joinToString("\n") { field ->
-                    """
-                    <div class="model-field">
-                        <span class="field-name">${field.name}</span>
-                        <span class="field-type">${field.type.substringAfterLast('.')}</span>
-                        <span class="${if (field.required) "field-required" else "field-optional"}">
-                            ${if (field.required) "Required" else "Optional"}
-                        </span>
-                        ${if (field.description != null) """
-                        <span class="field-description">${field.description}</span>
-                        """ else ""}
-                    </div>
-                    """.trimIndent()
+                    generateFieldHtml(field, 0)
                 }}
             </div>
             """ else """
@@ -913,6 +981,38 @@ class ApiDocumentationGenerator(
             </div>
         </div>
         """.trimIndent()
+    }
+
+    private fun generateFieldHtml(field: ModelField, depth: Int): String {
+        val fieldHtml = """
+        <div class="model-field" style="margin-left: ${depth * 20}px;">
+            <span class="field-name">${field.name}</span>
+            <span class="field-type">${field.type.substringAfterLast('.')}</span>
+            <span class="${if (field.required) "field-required" else "field-optional"}">
+                ${if (field.required) "Required" else "Optional"}
+            </span>
+            ${if (field.description != null) "<span class=\"field-description\">${field.description}</span>" else ""}
+        </div>
+        """.trimIndent()
+        
+        // 중첩된 모델이 있으면 재귀적으로 처리
+        val nestedHtml = field.nestedModel?.let { nestedModel ->
+            if (nestedModel.modelFields.isNotEmpty()) {
+                """
+                <div class="nested-model" style="margin-left: ${(depth + 1) * 20}px;">
+                    <div class="nested-model-header">
+                        <span class="nested-model-name">${nestedModel.type.substringAfterLast('.')}</span>
+                        ${if (nestedModel.isEnum) "<span class=\"enum-badge\">Enum</span>" else ""}
+                    </div>
+                    ${nestedModel.modelFields.joinToString("") { nestedField ->
+                        generateFieldHtml(nestedField, depth + 2)
+                    }}
+                </div>
+                """.trimIndent()
+            } else ""
+        } ?: ""
+        
+        return fieldHtml + nestedHtml
     }
 
     /**

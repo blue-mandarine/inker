@@ -80,7 +80,9 @@ data class RequestBodyInfo(
     val type: String,
     val required: Boolean = true,
     val description: String? = null,
-    val modelFields: List<ModelField> = emptyList()
+    val modelFields: List<ModelField> = emptyList(),
+    val depth: Int = 0,
+    val isEnum: Boolean = false
 )
 
 /**
@@ -92,7 +94,8 @@ data class ModelField(
     val type: String,
     val required: Boolean = false,
     val description: String? = null,
-    val defaultValue: String? = null
+    val defaultValue: String? = null,
+    val nestedModel: RequestBodyInfo? = null
 )
 
 /**

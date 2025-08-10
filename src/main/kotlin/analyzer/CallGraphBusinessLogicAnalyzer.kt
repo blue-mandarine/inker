@@ -3,14 +3,12 @@ package analyzer
 import model.*
 import org.objectweb.asm.tree.*
 import java.io.File
-import java.io.FileInputStream
-import java.util.jar.JarFile
 
 /**
  * Call Graph 분석기
  * Controller에서 호출되는 모든 비즈니스 로직 메서드를 추적하고, 각 Layer의 예외를 분석합니다.
  */
-class CallGraphAnalyzer(
+class CallGraphBusinessLogicAnalyzer(
     private val exceptionAnalyzer: ExceptionAnalyzer
 ) {
     

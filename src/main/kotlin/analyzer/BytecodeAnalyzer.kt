@@ -43,8 +43,8 @@ class BytecodeAnalyzer {
         // 2단계: @ResponseStatus 어노테이션 정보 수집
         exceptionAnalyzer.collectResponseStatusInfo(classFiles)
         
-        // 3단계: Service Layer 클래스들 로드
-        callGraphAnalyzer.loadServiceClasses(classFiles)
+        // 3단계: 비즈니스 로직 클래스들 로드
+        callGraphAnalyzer.loadBusinessLogicClasses(classFiles)
         
         // 4단계: Controller 클래스들 분석
         println("📊 Controller 분석 시작...")
@@ -79,8 +79,8 @@ class BytecodeAnalyzer {
         println("   - 경로: ${System.getProperty("project.path", "Unknown")}")
         println("   - 총 Controller 수: ${controllers.size}")
         println("   - 총 엔드포인트 수: ${controllers.sumOf { it.endpoints.size }}")
-        println("   - Service 클래스 수: ${stats["serviceClasses"]}")
-        println("   - Service 메서드 수: ${stats["serviceMethods"]}")
+        println("   - 비즈니스 로직 클래스 수: ${stats["businessLogicClasses"]}")
+        println("   - 비즈니스 로직 메서드 수: ${stats["businessLogicMethods"]}")
         val totalExceptions = controllers.sumOf { controller ->
             controller.endpoints.sumOf { endpoint ->
                 endpoint.responses?.failures?.size ?: 0
@@ -394,9 +394,9 @@ class BytecodeAnalyzer {
         val controllerExceptions = exceptionAnalyzer.analyzeMethodExceptions(methodNode)
         allFailureResponses.addAll(controllerExceptions)
         
-        // 2. Service Layer에서 발생하는 예외들 (Call Graph 분석)
-        val serviceExceptions = callGraphAnalyzer.analyzeServiceExceptions(methodNode, controllerClass)
-        allFailureResponses.addAll(serviceExceptions)
+        // 2. 비즈니스 로직에서 발생하는 예외들 (Call Graph 분석)
+        val businessLogicExceptions = callGraphAnalyzer.analyzeBusinessLogicExceptions(methodNode, controllerClass)
+        allFailureResponses.addAll(businessLogicExceptions)
         
         // 3. ResponseEntity에서 추출된 에러 상태 코드들 (4xx, 5xx)
         responseEntityStatusCodes.filter { it >= 400 }.forEach { statusCode ->

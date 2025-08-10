@@ -8,66 +8,59 @@ import java.util.jar.JarFile
 
 /**
  * Call Graph 분석기
- * Controller에서 Service 메서드 호출을 추적하고, Service Layer의 예외를 분석합니다.
+ * Controller에서 호출되는 모든 비즈니스 로직 메서드를 추적하고, 각 Layer의 예외를 분석합니다.
  */
 class CallGraphAnalyzer(
     private val exceptionAnalyzer: ExceptionAnalyzer
 ) {
     
-    private val serviceClasses = mutableMapOf<String, ClassNode>() // 클래스명 -> ClassNode
-    private val serviceMethodNodes = mutableMapOf<String, MethodNode>() // 메서드시그니처 -> MethodNode
+    private val businessLogicClasses = mutableMapOf<String, ClassNode>() // 클래스명 -> ClassNode
+    private val businessLogicMethodNodes = mutableMapOf<String, MethodNode>() // 메서드시그니처 -> MethodNode
     
     /**
-     * Service Layer 클래스들을 로드합니다.
+     * 비즈니스 로직 클래스들을 로드합니다.
      */
-    fun loadServiceClasses(classFiles: List<File>) {
-        println("📊 Service Layer 클래스 로딩 시작...")
+    fun loadBusinessLogicClasses(classFiles: List<File>) {
+        println("📊 비즈니스 로직 클래스 로딩 시작...")
         
         classFiles.forEach { classFile ->
             try {
                 val classNode = BytecodeAnalyzer.analyzeClassFile(classFile)
                 val className = classNode.name.replace('/', '.')
                 
-                // Service, Repository, Component 등의 클래스들을 포함
-                if (isServiceClass(classNode, className)) {
-                    serviceClasses[className] = classNode
+                // 어노테이션 기반으로 비즈니스 로직 클래스들을 식별
+                if (isBusinessLogicClass(classNode, className)) {
+                    businessLogicClasses[className] = classNode
                     
                     // 메서드들도 인덱싱
                     classNode.methods?.forEach { method ->
                         val methodNode = method as MethodNode
                         val methodSignature = "$className.${methodNode.name}${methodNode.desc}"
-                        serviceMethodNodes[methodSignature] = methodNode
+                        businessLogicMethodNodes[methodSignature] = methodNode
                     }
                     
-                    println("🔍 Service 클래스 로드: $className (메서드 ${classNode.methods?.size ?: 0}개)")
+                    println("🔍 비즈니스 로직 클래스 로드: $className (메서드 ${classNode.methods?.size ?: 0}개)")
                 }
             } catch (e: Exception) {
                 println("⚠️  클래스 로드 실패: ${classFile.name} - ${e.message}")
             }
         }
         
-        println("✅ Service Layer 로딩 완료: ${serviceClasses.size}개 클래스, ${serviceMethodNodes.size}개 메서드")
+        println("✅ 비즈니스 로직 클래스 로딩 완료: ${businessLogicClasses.size}개 클래스, ${businessLogicMethodNodes.size}개 메서드")
     }
     
     /**
-     * Service 관련 클래스인지 확인합니다.
+     * 비즈니스 로직 관련 클래스인지 확인합니다.
      */
-    private fun isServiceClass(classNode: ClassNode, className: String): Boolean {
-        // 클래스명 패턴으로 확인
-        if (className.contains("Service") || 
-            className.contains("Repository") || 
-            className.contains("Component") ||
-            className.contains("Helper") ||
-            className.contains("Utils")) {
-            return true
-        }
-        
-        // 어노테이션으로 확인
+    private fun isBusinessLogicClass(classNode: ClassNode, className: String): Boolean {
+        // 어노테이션으로만 확인 - 클래스명 패턴은 제거
         classNode.visibleAnnotations?.forEach { annotation ->
             val annotationType = annotation.desc
             if (annotationType.contains("Service") || 
                 annotationType.contains("Repository") || 
-                annotationType.contains("Component")) {
+                annotationType.contains("Component") ||
+                annotationType.contains("Configuration") ||
+                annotationType.contains("Bean")) {
                 return true
             }
         }
@@ -76,45 +69,45 @@ class CallGraphAnalyzer(
     }
     
     /**
-     * Controller 메서드에서 Service 메서드 호출을 분석하고, Service에서 발생하는 예외를 추적합니다.
+     * Controller 메서드에서 호출되는 비즈니스 로직 메서드들을 분석하고, 각 Layer에서 발생하는 예외를 추적합니다.
      */
-    fun analyzeServiceExceptions(controllerMethod: MethodNode, controllerClass: String): List<FailureResponse> {
-        val serviceExceptions = mutableListOf<FailureResponse>()
+    fun analyzeBusinessLogicExceptions(controllerMethod: MethodNode, controllerClass: String): List<FailureResponse> {
+        val businessLogicExceptions = mutableListOf<FailureResponse>()
         
-        // Controller 메서드에서 호출되는 Service 메서드들을 찾기
-        val serviceCalls = findServiceCalls(controllerMethod)
+        // Controller 메서드에서 호출되는 비즈니스 로직 메서드들을 찾기
+        val businessLogicCalls = findBusinessLogicCalls(controllerMethod)
         
-        serviceCalls.forEach { serviceCall ->
+        businessLogicCalls.forEach { businessLogicCall ->
             try {
-                val serviceMethod = serviceMethodNodes[serviceCall]
-                if (serviceMethod != null) {
+                val businessLogicMethod = businessLogicMethodNodes[businessLogicCall]
+                if (businessLogicMethod != null) {
                     // 호출 체인 예외 분석
-                    val exceptions = analyzeDeepServiceExceptions(serviceMethod)
+                    val exceptions = analyzeDeepBusinessLogicExceptions(businessLogicMethod)
                     exceptions.forEach { exception ->
-                        // Service 예외를 Controller와 연결
+                        // 비즈니스 로직 예외를 Controller와 연결
                         val enhancedException = exception.copy(
-                            detectedAt = if (exception.detectedAt == "Direct throw") "Service Layer" else exception.detectedAt
+                            detectedAt = if (exception.detectedAt == "Direct throw") "Business Logic Layer" else exception.detectedAt
                         )
-                        serviceExceptions.add(enhancedException)
+                        businessLogicExceptions.add(enhancedException)
                     }
                     
-                    println("🔗 Deep Service 호출 분석: $serviceCall -> ${exceptions.size}개 예외 발견 (다층 체인 포함)")
+                    println("🔗 Deep 비즈니스 로직 호출 분석: $businessLogicCall -> ${exceptions.size}개 예외 발견 (다층 체인 포함)")
                 } else {
-                    println("⚠️  Service 메서드를 찾을 수 없음: $serviceCall")
+                    println("⚠️  비즈니스 로직 메서드를 찾을 수 없음: $businessLogicCall")
                 }
             } catch (e: Exception) {
-                println("❌ Service 예외 분석 오류: $serviceCall - ${e.message}")
+                println("❌ 비즈니스 로직 예외 분석 오류: $businessLogicCall - ${e.message}")
             }
         }
         
-        return serviceExceptions
+        return businessLogicExceptions
     }
     
     /**
-     * Controller 메서드에서 호출되는 Service 메서드들을 찾습니다.
+     * Controller 메서드에서 호출되는 비즈니스 로직 메서드들을 찾습니다.
      */
-    private fun findServiceCalls(methodNode: MethodNode): List<String> {
-        val serviceCalls = mutableListOf<String>()
+    private fun findBusinessLogicCalls(methodNode: MethodNode): List<String> {
+        val businessLogicCalls = mutableListOf<String>()
         
         methodNode.instructions?.forEach { instruction ->
             when (instruction) {
@@ -124,9 +117,9 @@ class CallGraphAnalyzer(
                     val methodDesc = instruction.desc
                     val fullMethodSignature = "$className.$methodName$methodDesc"
                     
-                    // Service 클래스의 메서드인지 확인
-                    if (serviceClasses.containsKey(className)) {
-                        serviceCalls.add(fullMethodSignature)
+                    // 비즈니스 로직 클래스의 메서드인지 확인
+                    if (businessLogicClasses.containsKey(className)) {
+                        businessLogicCalls.add(fullMethodSignature)
                     }
                 }
                 is InvokeDynamicInsnNode -> {
@@ -135,9 +128,9 @@ class CallGraphAnalyzer(
                         val handle = instruction.bsm
                         if (handle != null) {
                             val className = handle.owner?.replace('/', '.')
-                            if (className != null && serviceClasses.containsKey(className)) {
+                            if (className != null && businessLogicClasses.containsKey(className)) {
                                 val methodSignature = "$className.${handle.name}${handle.desc}"
-                                serviceCalls.add(methodSignature)
+                                businessLogicCalls.add(methodSignature)
                             }
                         }
                     } catch (e: Exception) {
@@ -147,14 +140,14 @@ class CallGraphAnalyzer(
             }
         }
         
-        return serviceCalls.distinct()
+        return businessLogicCalls.distinct()
     }
     
     /**
-     * Service 메서드에서 다른 Service나 Repository를 호출하는 경우도 재귀적으로 분석합니다.
+     * 비즈니스 로직 메서드에서 다른 비즈니스 로직을 호출하는 경우도 재귀적으로 분석합니다.
      */
-    fun analyzeDeepServiceExceptions(serviceMethod: MethodNode, visited: MutableSet<String> = mutableSetOf()): List<FailureResponse> {
-        val methodSignature = "${serviceMethod.name}${serviceMethod.desc}"
+    fun analyzeDeepBusinessLogicExceptions(businessLogicMethod: MethodNode, visited: MutableSet<String> = mutableSetOf()): List<FailureResponse> {
+        val methodSignature = "${businessLogicMethod.name}${businessLogicMethod.desc}"
         
         // 무한 재귀 방지
         if (visited.contains(methodSignature)) {
@@ -165,14 +158,14 @@ class CallGraphAnalyzer(
         val exceptions = mutableListOf<FailureResponse>()
         
         // 현재 메서드의 직접 예외들
-        exceptions.addAll(exceptionAnalyzer.analyzeMethodExceptions(serviceMethod))
+        exceptions.addAll(exceptionAnalyzer.analyzeMethodExceptions(businessLogicMethod))
         
-        // 호출하는 다른 Service 메서드들의 예외들
-        val nestedServiceCalls = findServiceCalls(serviceMethod)
-        nestedServiceCalls.forEach { serviceCall ->
-            val nestedMethod = serviceMethodNodes[serviceCall]
+        // 호출하는 다른 비즈니스 로직 메서드들의 예외들
+        val nestedBusinessLogicCalls = findBusinessLogicCalls(businessLogicMethod)
+        nestedBusinessLogicCalls.forEach { businessLogicCall ->
+            val nestedMethod = businessLogicMethodNodes[businessLogicCall]
             if (nestedMethod != null) {
-                exceptions.addAll(analyzeDeepServiceExceptions(nestedMethod, visited))
+                exceptions.addAll(analyzeDeepBusinessLogicExceptions(nestedMethod, visited))
             }
         }
         
@@ -184,9 +177,9 @@ class CallGraphAnalyzer(
      */
     fun getStatistics(): Map<String, Any> {
         return mapOf(
-            "serviceClasses" to serviceClasses.size,
-            "serviceMethods" to serviceMethodNodes.size,
-            "serviceClassNames" to serviceClasses.keys.sorted().take(10) // 처음 10개만
+            "businessLogicClasses" to businessLogicClasses.size,
+            "businessLogicMethods" to businessLogicMethodNodes.size,
+            "businessLogicClassNames" to businessLogicClasses.keys.sorted().take(10) // 처음 10개만
         )
     }
 } 

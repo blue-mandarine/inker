@@ -617,33 +617,7 @@ class ApiDocumentationGenerator(
                     margin-bottom: 15px;
                 }
                 
-                .json-example {
-                    margin-top: 10px;
-                    background: #f8f9fa;
-                    border-radius: 5px;
-                    padding: 10px;
-                    border-left: 3px solid #007bff;
-                }
-                
-                .json-title {
-                    font-size: 0.85em;
-                    font-weight: 600;
-                    color: #495057;
-                    margin-bottom: 5px;
-                }
-                
-                .json-content {
-                    background: #2d3748;
-                    color: #e2e8f0;
-                    padding: 12px;
-                    border-radius: 4px;
-                    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
-                    font-size: 0.85em;
-                    line-height: 1.4;
-                    overflow-x: auto;
-                    margin: 0;
-                    white-space: pre;
-                }
+
                 
                 .nested-model {
                     border-left: 3px solid #007bff;
@@ -975,10 +949,7 @@ class ApiDocumentationGenerator(
             """ else """
             <div class="model-no-fields">No field information available</div>
             """}
-            <div class="json-example">
-                <div class="json-title">Request Body Example:</div>
-                <pre class="json-content">${generateJsonRequestBodyExample(requestBodyInfo)}</pre>
-            </div>
+
         </div>
         """.trimIndent()
     }
@@ -1050,10 +1021,7 @@ class ApiDocumentationGenerator(
                         ${if (responses.success.description != null) """
                         <div class="response-description">${responses.success.description}</div>
                         """ else ""}
-                        <div class="json-example">
-                            <div class="json-title">Response Example:</div>
-                            <pre class="json-content">${generateJsonSuccessExample(responses.success)}</pre>
-                        </div>
+
                     </div>
                 </div>
                 """ else ""}
@@ -1061,8 +1029,7 @@ class ApiDocumentationGenerator(
                 ${if (responses.failures.isNotEmpty()) """
                 <div class="response-section">
                     <h4>❌ Failure Responses</h4>
-                    ${responses.failures.joinToString("\n") { failure ->
-                        val jsonExample = generateJsonErrorExample(failure)
+                                        ${responses.failures.joinToString("\n") { failure ->
                         """
                         <div class="failure-response">
                             <div class="response-status">HTTP ${failure.statusCode}</div>
@@ -1071,10 +1038,7 @@ class ApiDocumentationGenerator(
                             <div class="response-description">${failure.description}</div>
                             """ else ""}
                             <div class="response-layer">📍 ${failure.detectedAt}</div>
-                            <div class="json-example">
-                                <div class="json-title">Response Example:</div>
-                                <pre class="json-content">$jsonExample</pre>
-                            </div>
+ 
                         </div>
                         """.trimIndent()
                     }}
@@ -1091,91 +1055,5 @@ class ApiDocumentationGenerator(
     
 
 
-    /**
-     * RequestBody JSON 예시를 생성합니다.
-     */
-    private fun generateJsonRequestBodyExample(requestBodyInfo: RequestBodyInfo): String {
-        if (requestBodyInfo.modelFields.isEmpty()) {
-            return "{}"
-        }
-        
-        val fields = requestBodyInfo.modelFields.map { field ->
-            val value = when {
-                field.type.contains("String") -> "\"${field.name}_value\""
-                field.type.contains("Integer") || field.type.contains("int") || field.type.contains("Long") || field.type.contains("long") -> "123"
-                field.type.contains("Boolean") || field.type.contains("boolean") -> "true"
-                field.type.contains("Double") || field.type.contains("double") || field.type.contains("Float") || field.type.contains("float") -> "123.45"
-                field.type.endsWith("[]") -> "[]"
-                else -> "{}"
-            }
-            "\"${field.name}\": $value"
-        }
-        
-        return "{\n  " + fields.joinToString(",\n  ") + "\n}"
-    }
 
-    /**
-     * 예외에 대한 JSON 응답 예시를 생성합니다.
-     */
-    private fun generateJsonErrorExample(failure: FailureResponse): String {
-        val timestamp = "2023-12-07T10:15:30.123Z"
-        val errorName = when (failure.statusCode) {
-            400 -> "Bad Request"
-            401 -> "Unauthorized" 
-            403 -> "Forbidden"
-            404 -> "Not Found"
-            409 -> "Conflict"
-            500 -> "Internal Server Error"
-            else -> "Error"
-        }
-        
-        return """
-{
-  "timestamp": "$timestamp",
-  "status": ${failure.statusCode},
-  "error": "$errorName",
-  "message": "${failure.description}",
-  "path": "/api/endpoint"
-}""".trimIndent()
-    }
-    
-    /**
-     * 성공 응답에 대한 JSON 예시를 생성합니다.
-     */
-    private fun generateJsonSuccessExample(success: SuccessResponse): String {
-        val responseType = success.type.substringAfterLast('.')
-        
-        return when (responseType) {
-            "List" -> """
-[
-  {
-    "id": 1,
-    "name": "Sample Item 1",
-    "description": "This is a sample item"
-  },
-  {
-    "id": 2,
-    "name": "Sample Item 2", 
-    "description": "Another sample item"
-  }
-]""".trimIndent()
-            
-            "String" -> "\"Success\""
-            
-            "Long", "Integer" -> "123"
-            
-            "Boolean" -> "true"
-            
-            "Void" -> "null"
-            
-            else -> """
-{
-  "id": 1,
-  "name": "Sample Response",
-  "description": "This is a sample response object",
-  "createdAt": "2023-12-07T10:15:30.123Z",
-  "status": "ACTIVE"
-}""".trimIndent()
-        }
-    }
 } 

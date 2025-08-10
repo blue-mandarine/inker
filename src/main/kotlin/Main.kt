@@ -21,6 +21,11 @@ fun main(args: Array<String>) {
                 name = "Hang-log",
                 path = "/Users/user/2023-hang-log",
                 description = "우아한테크코스 2023년 프로젝트"
+            ),
+            "3" to ProjectInfo(
+                name = "예약",
+                path = "/Users/user/IdeaProjects/booking-server",
+                description = "예약/주문 서비스"
             )
         )
         
@@ -45,7 +50,6 @@ fun main(args: Array<String>) {
             println()
         }
         
-        println("   3. 🔧 사용자 지정 경로")
         println("   0. ❌ 종료")
         println()
         print("선택 (1-3): ")
@@ -53,27 +57,13 @@ fun main(args: Array<String>) {
         val choice = readlnOrNull()
         
         when (choice) {
-            "1", "2" -> {
+            "1", "2", "3" -> {
                 val selectedProject = availableProjects[choice]!!
                 if (!File(selectedProject.path).exists()) {
                     println("❌ 프로젝트가 존재하지 않습니다: ${selectedProject.path}")
                     return
                 }
                 analyzeProject(selectedProject.path, selectedProject.name)
-            }
-            
-            "3" -> {
-                print("프로젝트 경로를 입력하세요: ")
-                val customPath = readlnOrNull()
-                if (customPath.isNullOrBlank()) {
-                    println("❌ 올바른 경로를 입력해주세요.")
-                    return
-                }
-                
-                print("프로젝트 이름을 입력하세요 (선택): ")
-                val customName = readlnOrNull()?.takeIf { it.isNotBlank() } ?: "Custom Project"
-                
-                analyzeProject(customPath, customName)
             }
             
             "0" -> {
@@ -154,8 +144,13 @@ private fun analyzeProject(projectPath: String, projectName: String) {
                 osName.contains("win") -> "start"
                 else -> "xdg-open"
             }
-            ProcessBuilder(command, "$projectFileName-api-documentation.html").start()
-            println("🚀 브라우저에서 HTML 파일을 열었습니다!")
+            val htmlFile = File("$projectFileName-api-documentation.html")
+            if (htmlFile.exists()) {
+                ProcessBuilder(command, htmlFile.absolutePath).start()
+                println("🚀 브라우저에서 HTML 파일을 열었습니다!")
+            } else {
+                println("❌ HTML 파일을 찾을 수 없습니다: ${htmlFile.absolutePath}")
+            }
         } catch (e: Exception) {
             println("❌ 브라우저 열기에 실패했습니다: ${e.message}")
         }

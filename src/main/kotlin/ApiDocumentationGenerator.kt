@@ -761,12 +761,31 @@ class ApiDocumentationGenerator(
      */
     private fun generateControllerHtml(controller: ControllerInfo): String {
         val controllerId = "controller-${controller.className.substringAfterLast('.').lowercase()}"
+        val baseInfo = if (controller.baseMapping.isNotEmpty()) {
+            // 클래스 레벨 매핑이 있는 경우, 첫 번째 엔드포인트의 전체 경로를 보여줌
+            val firstEndpoint = controller.endpoints.firstOrNull()
+            if (firstEndpoint != null) {
+                "Pattern: ${firstEndpoint.path}"
+            } else {
+                "Base: ${controller.baseMapping}"
+            }
+        } else {
+            // 클래스 레벨 매핑이 없는 경우, 첫 번째 엔드포인트의 경로 패턴을 보여줌
+            val firstEndpoint = controller.endpoints.firstOrNull()
+            if (firstEndpoint != null) {
+                val pathPattern = extractCommonPathPattern(firstEndpoint.path)
+                "Pattern: $pathPattern"
+            } else {
+                "No mapping"
+            }
+        }
+        
         return """
         <div class="controller" id="$controllerId">
             <div class="controller-header">
                 <div class="controller-title">${controller.className.substringAfterLast('.')}</div>
                 <div class="controller-info">
-                    <span>Base: ${if (controller.baseMapping.isNotEmpty()) controller.baseMapping else "/"}</span>
+                    <span>$baseInfo</span>
                     <span class="endpoint-count">${controller.endpoints.size} endpoints</span>
                     <span class="toggle-icon">▶</span>
                 </div>
@@ -778,6 +797,15 @@ class ApiDocumentationGenerator(
             </div>
         </div>
         """.trimIndent()
+    }
+
+    /**
+     * 경로에서 공통 패턴을 추출합니다.
+     * 예: /v3.0/businesses/{businessId}/commission-logs -> /v3.0/businesses/{businessId}/commission-logs
+     */
+    private fun extractCommonPathPattern(path: String): String {
+        // 전체 경로를 그대로 반환 (더 유용한 정보 제공)
+        return path
     }
 
     /**

@@ -58,7 +58,8 @@ data class ApiParameter(
     val required: Boolean = false,
     val source: ParameterSource,
     val description: String? = null,
-    val defaultValue: String? = null
+    val defaultValue: String? = null,
+    val requestBodyInfo: RequestBodyInfo? = null
 )
 
 /**
@@ -78,7 +79,20 @@ enum class ParameterSource {
 data class RequestBodyInfo(
     val type: String,
     val required: Boolean = true,
-    val description: String? = null
+    val description: String? = null,
+    val modelFields: List<ModelField> = emptyList()
+)
+
+/**
+ * 모델 클래스의 필드 정보
+ */
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class ModelField(
+    val name: String,
+    val type: String,
+    val required: Boolean = false,
+    val description: String? = null,
+    val defaultValue: String? = null
 )
 
 /**

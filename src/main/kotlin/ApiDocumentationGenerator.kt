@@ -499,6 +499,116 @@ class ApiDocumentationGenerator(
                     margin-bottom: 10px;
                 }
                 
+
+                
+                .model-fields {
+                    margin-bottom: 15px;
+                }
+                
+                .model-field {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 6px 0;
+                    border-bottom: 1px solid #dee2e6;
+                }
+                
+                .model-field:last-child {
+                    border-bottom: none;
+                }
+                
+                .field-name {
+                    font-weight: 600;
+                    color: #495057;
+                    min-width: 120px;
+                }
+                
+                .field-type {
+                    background: #e9ecef;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-size: 0.8em;
+                    color: #495057;
+                }
+                
+                .field-required {
+                    background: #dc3545;
+                    color: white;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-size: 0.7em;
+                }
+                
+                .field-optional {
+                    background: #28a745;
+                    color: white;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-size: 0.7em;
+                }
+                
+                .field-description {
+                    color: #6c757d;
+                    font-size: 0.9em;
+                    font-style: italic;
+                }
+                
+                .request-models {
+                    margin-bottom: 15px;
+                }
+                
+                .request-model-detail {
+                    background: white;
+                    border-radius: 5px;
+                    padding: 15px;
+                    margin-bottom: 15px;
+                    border-left: 4px solid #17a2b8;
+                }
+                
+                .request-model-simple {
+                    background: white;
+                    border-radius: 5px;
+                    padding: 15px;
+                    margin-bottom: 15px;
+                    border-left: 4px solid #6c757d;
+                }
+                
+                .model-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 15px;
+                    margin-bottom: 15px;
+                    padding-bottom: 10px;
+                    border-bottom: 1px solid #dee2e6;
+                }
+                
+                .model-name {
+                    font-weight: 600;
+                    color: #495057;
+                    font-size: 1.1em;
+                }
+                
+                .model-required {
+                    background: #dc3545;
+                    color: white;
+                    padding: 2px 8px;
+                    border-radius: 3px;
+                    font-size: 0.8em;
+                }
+                
+                .fields-title {
+                    font-weight: 600;
+                    color: #495057;
+                    margin-bottom: 10px;
+                    font-size: 0.9em;
+                }
+                
+                .model-no-fields {
+                    color: #6c757d;
+                    font-style: italic;
+                    margin-bottom: 15px;
+                }
+                
                 .json-example {
                     margin-top: 10px;
                     background: #f8f9fa;
@@ -695,7 +805,84 @@ class ApiDocumentationGenerator(
             </div>
             """ else ""}
             
+            ${if (hasRequestBody(endpoint)) generateRequestModelHtml(endpoint) else ""}
+            
             ${if (endpoint.responses != null) generateResponsesHtml(endpoint.responses) else ""}
+        </div>
+        """.trimIndent()
+    }
+
+    /**
+     * 엔드포인트에 RequestBody가 있는지 확인합니다.
+     */
+    private fun hasRequestBody(endpoint: ApiEndpoint): Boolean {
+        return endpoint.parameters.any { it.source == ParameterSource.REQUEST_BODY }
+    }
+
+    /**
+     * Request 모델 HTML을 생성합니다.
+     */
+    private fun generateRequestModelHtml(endpoint: ApiEndpoint): String {
+        val requestBodyParams = endpoint.parameters.filter { it.source == ParameterSource.REQUEST_BODY }
+        
+        return """
+        <div class="section">
+            <div class="section-title">
+                📥 Request Model
+            </div>
+            <div class="request-models">
+                ${requestBodyParams.joinToString("\n") { param ->
+                    if (param.requestBodyInfo != null) {
+                        generateRequestModelDetailHtml(param.requestBodyInfo!!)
+                    } else {
+                        """
+                        <div class="request-model-simple">
+                            <div class="model-type">${param.type.substringAfterLast('.')}</div>
+                            <div class="model-description">No detailed model information available</div>
+                        </div>
+                        """.trimIndent()
+                    }
+                }}
+            </div>
+        </div>
+        """.trimIndent()
+    }
+
+    /**
+     * Request 모델 상세 HTML을 생성합니다.
+     */
+    private fun generateRequestModelDetailHtml(requestBodyInfo: RequestBodyInfo): String {
+        return """
+        <div class="request-model-detail">
+            <div class="model-header">
+                <span class="model-name">${requestBodyInfo.type.substringAfterLast('.')}</span>
+                <span class="model-required">${if (requestBodyInfo.required) "Required" else "Optional"}</span>
+            </div>
+            ${if (requestBodyInfo.modelFields.isNotEmpty()) """
+            <div class="model-fields">
+                <div class="fields-title">Fields:</div>
+                ${requestBodyInfo.modelFields.joinToString("\n") { field ->
+                    """
+                    <div class="model-field">
+                        <span class="field-name">${field.name}</span>
+                        <span class="field-type">${field.type.substringAfterLast('.')}</span>
+                        <span class="${if (field.required) "field-required" else "field-optional"}">
+                            ${if (field.required) "Required" else "Optional"}
+                        </span>
+                        ${if (field.description != null) """
+                        <span class="field-description">${field.description}</span>
+                        """ else ""}
+                    </div>
+                    """.trimIndent()
+                }}
+            </div>
+            """ else """
+            <div class="model-no-fields">No field information available</div>
+            """}
+            <div class="json-example">
+                <div class="json-title">Request Body Example:</div>
+                <pre class="json-content">${generateJsonRequestBodyExample(requestBodyInfo)}</pre>
+            </div>
         </div>
         """.trimIndent()
     }
@@ -774,6 +961,31 @@ class ApiDocumentationGenerator(
         """.trimIndent()
     }
     
+
+
+    /**
+     * RequestBody JSON 예시를 생성합니다.
+     */
+    private fun generateJsonRequestBodyExample(requestBodyInfo: RequestBodyInfo): String {
+        if (requestBodyInfo.modelFields.isEmpty()) {
+            return "{}"
+        }
+        
+        val fields = requestBodyInfo.modelFields.map { field ->
+            val value = when {
+                field.type.contains("String") -> "\"${field.name}_value\""
+                field.type.contains("Integer") || field.type.contains("int") || field.type.contains("Long") || field.type.contains("long") -> "123"
+                field.type.contains("Boolean") || field.type.contains("boolean") -> "true"
+                field.type.contains("Double") || field.type.contains("double") || field.type.contains("Float") || field.type.contains("float") -> "123.45"
+                field.type.endsWith("[]") -> "[]"
+                else -> "{}"
+            }
+            "\"${field.name}\": $value"
+        }
+        
+        return "{\n  " + fields.joinToString(",\n  ") + "\n}"
+    }
+
     /**
      * 예외에 대한 JSON 응답 예시를 생성합니다.
      */

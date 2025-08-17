@@ -13,6 +13,7 @@ import org.objectweb.asm.ClassReader
 import org.objectweb.asm.tree.ClassNode
 import org.objectweb.asm.tree.MethodNode
 import utils.ResponseEntityParser
+import utils.TypeExtractorUtils
 import java.io.File
 import java.io.FileInputStream
 
@@ -303,7 +304,7 @@ class BytecodeAnalyzer {
                         }
 
                         "Lorg/springframework/web/bind/annotation/RequestBody;" -> {
-                            val type = extractParameterType(methodNode, paramIndex)
+                            val type = TypeExtractorUtils.extractParameterType(methodNode, paramIndex)
                             val requestBodyInfo = analyzeRequestBodyModel(type)
                             parameters.add(
                                 ApiParameter(
@@ -323,49 +324,7 @@ class BytecodeAnalyzer {
         return parameters
     }
 
-    /**
-     * 파라미터의 타입을 추출합니다.
-     */
-    private fun extractParameterType(methodNode: MethodNode, paramIndex: Int): String {
-        try {
-            // 메서드 시그니처에서 파라미터 타입 추출
-            val methodDesc = methodNode.desc
-            val paramTypes = org.objectweb.asm.Type.getArgumentTypes(methodDesc)
 
-            if (paramIndex < paramTypes.size) {
-                val paramType = paramTypes[paramIndex]
-                return when {
-                    paramType.descriptor.startsWith("L") -> {
-                        // 클래스 타입 (예: Ljava/lang/String; -> java.lang.String)
-                        paramType.descriptor.substring(1, paramType.descriptor.length - 1)
-                            .replace('/', '.')
-                    }
-
-                    paramType.descriptor.startsWith("[") -> {
-                        // 배열 타입 (예: [Ljava/lang/String; -> java.lang.String[])
-                        val elementType = paramType.descriptor.substring(1)
-                        if (elementType.startsWith("L")) {
-                            elementType.substring(1, elementType.length - 1).replace(
-                                '/',
-                                '.'
-                            ) + "[]"
-                        } else {
-                            paramType.descriptor
-                        }
-                    }
-
-                    else -> {
-                        // 기본 타입 (예: I -> int, Z -> boolean)
-                        paramType.descriptor
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            println("⚠️  파라미터 타입 추출 실패: ${e.message}")
-        }
-
-        return "java.lang.Object"
-    }
 
     /**
      * RequestBody 모델 클래스를 분석하여 필드 정보를 추출합니다.
@@ -462,25 +421,7 @@ class BytecodeAnalyzer {
         return null
     }
 
-    /**
-     * 메서드의 반환 타입을 추출합니다.
-     */
-    private fun extractReturnType(descriptor: String): String {
-        val returnTypeDesc = descriptor.substringAfterLast(')')
-        return when {
-            returnTypeDesc.startsWith("L") && returnTypeDesc.endsWith(";") -> {
-                returnTypeDesc.substring(1, returnTypeDesc.length - 1).replace('/', '.')
-            }
 
-            returnTypeDesc == "V" -> "void"
-            returnTypeDesc == "I" -> "int"
-            returnTypeDesc == "Z" -> "boolean"
-            returnTypeDesc == "J" -> "long"
-            returnTypeDesc == "F" -> "float"
-            returnTypeDesc == "D" -> "double"
-            else -> returnTypeDesc
-        }
-    }
 
     /**
      * 기본 매핑과 메서드 매핑을 결합합니다.
@@ -502,7 +443,7 @@ class BytecodeAnalyzer {
      */
     private fun analyzeResponses(methodNode: MethodNode, controllerClass: String): ApiResponses {
         // 성공 응답 분석
-        val returnType = extractReturnType(methodNode.desc)
+        val returnType = TypeExtractorUtils.extractReturnType(methodNode.desc)
 
         // ResponseEntity 패턴에서 상태 코드 추출
         val responseEntityStatusCodes = if (returnType.contains("ResponseEntity")) {

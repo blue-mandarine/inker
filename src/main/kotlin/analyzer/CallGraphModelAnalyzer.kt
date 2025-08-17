@@ -2,6 +2,7 @@ package analyzer
 
 import model.*
 import org.objectweb.asm.tree.*
+import utils.TypeExtractorUtils
 import java.io.File
 import java.io.FileInputStream
 
@@ -107,11 +108,11 @@ class CallGraphModelAnalyzer {
                 // 일반 모델 클래스 분석
                 classNode.fields.forEach { fieldNode ->
                     val fieldName = fieldNode.name
-                    val fieldType = extractFieldType(fieldNode.desc)
+                    val fieldType = TypeExtractorUtils.extractFieldType(fieldNode.desc)
                     val required = !fieldType.endsWith("?") && !fieldType.contains("Optional")
                     
                     // 중첩된 모델인지 확인
-                    val nestedModel = if (isComplexType(fieldType) && depth < maxDepth) {
+                    val nestedModel = if (TypeExtractorUtils.isComplexType(fieldType) && depth < maxDepth) {
                         analyzeModelDeep(fieldType, depth + 1, maxDepth, visited.toMutableSet())
                     } else null
                     
@@ -144,42 +145,7 @@ class CallGraphModelAnalyzer {
             return RequestBodyInfo(type = className)
         }
     }
-    
-    /**
-     * 복잡한 타입인지 확인합니다 (중첩 분석 대상).
-     */
-    private fun isComplexType(type: String): Boolean {
-        return !type.startsWith("java.lang.") && 
-               !type.startsWith("java.util.") && 
-               !type.startsWith("java.time.") &&
-               !type.matches(Regex("^(String|Integer|Long|Double|Float|Boolean|Byte|Short|Char|Int|Long|Double|Float|Boolean|Byte|Short|Char|\\[.*\\])$"))
-    }
-    
-    /**
-     * 필드 타입을 추출합니다.
-     */
-    private fun extractFieldType(descriptor: String): String {
-        return when {
-            descriptor.startsWith("L") -> {
-                // 클래스 타입
-                descriptor.substring(1, descriptor.length - 1).replace('/', '.')
-            }
-            descriptor.startsWith("[") -> {
-                // 배열 타입
-                val elementType = descriptor.substring(1)
-                if (elementType.startsWith("L")) {
-                    elementType.substring(1, elementType.length - 1).replace('/', '.') + "[]"
-                } else {
-                    descriptor
-                }
-            }
-            else -> {
-                // 기본 타입
-                descriptor
-            }
-        }
-    }
-    
+
     /**
      * 필드 설명을 추출합니다.
      */
@@ -201,16 +167,5 @@ class CallGraphModelAnalyzer {
         }
         
         return enumValues
-    }
-    
-    /**
-     * 통계 정보를 반환합니다.
-     */
-    fun getStatistics(): Map<String, Any> {
-        return mapOf(
-            "modelClasses" to modelClasses.size,
-            "enumClasses" to enumClasses.size,
-            "analyzedModels" to analyzedModels.size
-        )
     }
 } 

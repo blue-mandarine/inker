@@ -21,11 +21,6 @@ fun main(args: Array<String>) {
                 name = "Hang-log",
                 path = "/Users/user/2023-hang-log",
                 description = "우아한테크코스 2023년 프로젝트"
-            ),
-            "3" to ProjectInfo(
-                name = "예약",
-                path = "/Users/user/IdeaProjects/booking-server",
-                description = "예약/주문 서비스"
             )
         )
         
